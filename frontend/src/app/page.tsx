@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useSession, signOut } from 'next-auth/react'
-import { IS_MOCK, getTimeline, getCorrelations, getFoodEntries, getHealthOutcomes, createFoodEntry, createHealthOutcome } from '@/lib/api'
+import { IS_MOCK, getTimeline, getCorrelations, getFoodEntries, getHealthOutcomes, createFoodEntry, createHealthOutcome, getPredictions, getTrends, exportData, runAnalysis } from '@/lib/api'
 import type { MockFoodEntry, MockHealthOutcome, MockCorrelation } from '@/lib/mockData'
 import FoodForm from '@/components/FoodForm'
 import HealthOutcomeForm from '@/components/HealthOutcomeForm'
@@ -105,6 +105,7 @@ function TimelineView() {
 
 function TriggerAnalysis() {
   const [correlations, setCorrelations] = useState<MockCorrelation[]>([])
+  const [running, setRunning] = useState(false)
 
   useEffect(() => {
     async function fetchCorrelations() {
@@ -137,13 +138,21 @@ function TriggerAnalysis() {
     )
   }
 
+  const confidenceBadge = (c: MockCorrelation) => {
+    if (c.count >= 5) return <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full">High</span>
+    if (c.count >= 3) return <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Trending</span>
+    return null
+  }
+
   const bmCorrelations = correlations.filter(c => c.outcomeType === 'bm').sort((a, b) => b.avgSeverity - a.avgSeverity)
   const symptomCorrelations = correlations.filter(c => c.outcomeType === 'symptom').sort((a, b) => b.avgSeverity - a.avgSeverity)
 
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-xl p-5 shadow-sm">
-        <h3 className="font-semibold text-lg mb-3">🚽 Bowel Movement Triggers</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-lg">🚽 Bowel Movement Triggers</h3>
+        </div>
         {bmCorrelations.length === 0 ? (
           <p className="text-gray-400 text-sm">Not enough data yet. Log more meals and outcomes.</p>
         ) : (
@@ -152,6 +161,7 @@ function TriggerAnalysis() {
               <div key={c.ingredient} className="flex items-center gap-3">
                 <span className="w-28 capitalize font-medium text-sm">{c.ingredient}</span>
                 <div className="flex-1">{severityBar(c.avgSeverity)}</div>
+                {confidenceBadge(c)}
                 <span className="text-xs text-gray-500 w-20 text-right">{c.avgSeverity.toFixed(1)} avg ({c.count}x)</span>
               </div>
             ))}
@@ -169,11 +179,199 @@ function TriggerAnalysis() {
               <div key={c.ingredient} className="flex items-center gap-3">
                 <span className="w-28 capitalize font-medium text-sm">{c.ingredient}</span>
                 <div className="flex-1">{severityBar(c.avgSeverity)}</div>
+                {confidenceBadge(c)}
                 <span className="text-xs text-gray-500 w-20 text-right">{c.avgSeverity.toFixed(1)} avg ({c.count}x)</span>
               </div>
             ))}
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+function PredictionsView() {
+  const { data: session } = useSession()
+  const [warnings, setWarnings] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [running, setRunning] = useState(false)
+
+  useEffect(() => {
+    if (session?.user?.id) {
+      fetchPredictions()
+    }
+  }, [session?.user?.id])
+
+  async function fetchPredictions() {
+    if (!session?.user?.id) return
+    try {
+      const data = await getPredictions(session.user.id)
+      setWarnings(data.warnings || [])
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleRunAnalysis() {
+    if (!session?.user?.id) return
+    setRunning(true)
+    try {
+      await runAnalysis(session.user.id)
+      await fetchPredictions()
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  if (loading) return <div className="p-4">Loading predictions...</div>
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-xl p-5 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="font-semibold text-lg">⚠️ Personalized Trigger Warnings</h3>
+            <p className="text-sm text-gray-500 mt-1">Based on your own food-outcome patterns</p>
+          </div>
+          <button
+            onClick={handleRunAnalysis}
+            disabled={running}
+            className="bg-blue-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            {running ? 'Analyzing...' : 'Run Analysis'}
+          </button>
+        </div>
+
+        {warnings.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-gray-400 mb-3">No trigger warnings yet.</p>
+            <p className="text-sm text-gray-400">Run the analysis to find your personalized food triggers.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {warnings.map((w, i) => (
+              <div key={i} className="flex items-start gap-3 bg-amber-50 rounded-lg p-3 border border-amber-200">
+                <span className="text-xl">⚠️</span>
+                <div className="flex-1">
+                  <p className="font-medium text-amber-900">{w.ingredient}</p>
+                  <p className="text-sm text-amber-700">{w.message}</p>
+                </div>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                  w.confidence === 'high' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
+                }`}>
+                  {w.confidence}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-xl p-5 shadow-sm">
+        <h3 className="font-semibold text-lg mb-3">🎯 Prediction Confidence Levels</h3>
+        <div className="space-y-2 text-sm">
+          <div className="flex items-center gap-2">
+            <span className="bg-red-100 text-red-800 px-2 py-0.5 rounded-full text-xs">High</span>
+            <span className="text-gray-600">p &lt; 0.01 — Statistically significant</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full text-xs">Moderate</span>
+            <span className="text-gray-600">p &lt; 0.05 — Likely related</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded-full text-xs">Trending</span>
+            <span className="text-gray-600">Pattern detected, more data needed</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TrendsView() {
+  const { data: session } = useSession()
+  const [trends, setTrends] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (session?.user?.id) {
+      fetchTrends()
+    }
+  }, [session?.user?.id])
+
+  async function fetchTrends() {
+    if (!session?.user?.id) return
+    try {
+      const data = await getTrends(session.user.id, 30)
+      setTrends(data)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (loading) return <div className="p-4">Loading trends...</div>
+
+  const weeklyData = trends?.weeklyTrends || []
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-xl p-5 shadow-sm">
+        <h3 className="font-semibold text-lg mb-4">📊 Weekly Average Severity</h3>
+        {weeklyData.length === 0 ? (
+          <p className="text-gray-400 text-sm">Not enough data for trends yet.</p>
+        ) : (
+          <div className="flex items-end gap-2 h-40">
+            {weeklyData.map((w: any, i: number) => {
+              const maxSeverity = Math.max(...weeklyData.filter((x: any) => x.avgSeverity).map((x: any) => x.avgSeverity))
+              const height = w.avgSeverity ? (w.avgSeverity / 5) * 100 : 0
+              return (
+                <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                  <div className="w-full bg-blue-100 rounded-t" style={{ height: `${height}%` }} />
+                  <span className="text-xs text-gray-400">{w.week?.slice(5)}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-xl p-5 shadow-sm">
+        <h3 className="font-semibold text-lg mb-3">🍽️ Top Ingredients (30 days)</h3>
+        {trends?.topIngredients?.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {trends.topIngredients.map((ing: any, i: number) => (
+              <span key={i} className="bg-green-100 text-green-800 text-sm px-3 py-1 rounded-full">
+                {ing.name} ({ing.count}x)
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="text-gray-400 text-sm">No ingredient data yet.</p>
+        )}
+      </div>
+
+      <div className="bg-white rounded-xl p-5 shadow-sm">
+        <h3 className="font-semibold text-lg mb-3">📈 Summary</h3>
+        <div className="grid grid-cols-3 gap-4 text-center">
+          <div className="bg-gray-50 rounded-lg p-3">
+            <p className="text-2xl font-bold text-gray-900">{trends?.summary?.totalFoodEntries || 0}</p>
+            <p className="text-xs text-gray-500">Food Entries</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-3">
+            <p className="text-2xl font-bold text-gray-900">{trends?.summary?.totalHealthOutcomes || 0}</p>
+            <p className="text-xs text-gray-500">Health Outcomes</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-3">
+            <p className="text-2xl font-bold text-gray-900">{trends?.summary?.avgDailyBmSeverity || '—'}</p>
+            <p className="text-xs text-gray-500">Avg Severity</p>
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -425,7 +623,7 @@ function SignInPrompt() {
 
 function DashboardContent() {
   const { data: session } = useSession()
-  const [tab, setTab] = useState<'timeline' | 'analysis' | 'gallery' | 'log' | 'roadmap'>('timeline')
+  const [tab, setTab] = useState<'timeline' | 'analysis' | 'predictions' | 'trends' | 'gallery' | 'log' | 'roadmap'>('timeline')
   const [stats, setStats] = useState({ meals: 0, outcomes: 0, linked: 0, triggers: 0 })
   const [loading, setLoading] = useState(true)
 
@@ -452,26 +650,55 @@ function DashboardContent() {
     fetchStats()
   }, [])
 
+  const handleExport = async () => {
+    if (!session?.user?.id) return
+    try {
+      const blob = await exportData(session.user.id, 'csv')
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `gut-health-export-${session.user.id}.csv`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Export failed:', err)
+    }
+  }
+
   return (
     <>
-      <div className="flex gap-1 bg-white rounded-lg shadow-sm p-1 mb-6">
-        {(['timeline', 'analysis', 'gallery', 'log', 'roadmap'] as const).map(t => (
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex gap-1 bg-white rounded-lg shadow-sm p-1">
+          {(['timeline', 'analysis', 'predictions', 'trends', 'gallery', 'log', 'roadmap'] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                tab === t
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              {t === 'timeline' ? '📅' : t === 'analysis' ? '🔍' : t === 'predictions' ? '⚠️' : t === 'trends' ? '📊' : t === 'gallery' ? '📷' : t === 'log' ? '✏️' : '🗺️'}
+            </button>
+          ))}
+        </div>
+        {session && (
           <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`flex-1 py-2.5 text-sm font-medium rounded-md transition-colors ${
-              tab === t
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
+            onClick={handleExport}
+            className="bg-green-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
           >
-            {t === 'timeline' ? '📅 Timeline' : t === 'analysis' ? '🔍 Analysis' : t === 'gallery' ? '📷 Gallery' : t === 'log' ? '✏️ Log' : '🗺️ Roadmap'}
+            📥 Export
           </button>
-        ))}
+        )}
       </div>
 
       {tab === 'timeline' && <TimelineView />}
       {tab === 'analysis' && <TriggerAnalysis />}
+      {tab === 'predictions' && <PredictionsView />}
+      {tab === 'trends' && <TrendsView />}
       {tab === 'gallery' && <FoodGallery />}
       {tab === 'log' && <LogView />}
       {tab === 'roadmap' && <Roadmap />}

@@ -31,6 +31,21 @@ services:
       retries: 3
     restart: unless-stopped
 
+  trigger-analyzer:
+    build:
+      context: ./services/trigger-analyzer
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
   backend:
     image: nginx:alpine
     ports:
