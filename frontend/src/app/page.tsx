@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { mockFoodEntries, mockHealthOutcomes, calculateCorrelations } from '@/lib/mockData'
 import type { MockFoodEntry, MockHealthOutcome, MockCorrelation } from '@/lib/mockData'
 
+type TimelineEntry = (MockFoodEntry & { _type: 'food' }) | (MockHealthOutcome & { _type: 'outcome' })
+
 // ─── Stats Cards ────────────────────────────────────────────
 function StatCard({ label, value, color }: { label: string; value: string | number; color: string }) {
   const colorMap: Record<string, string> = {
@@ -23,18 +25,18 @@ function StatCard({ label, value, color }: { label: string; value: string | numb
 
 // ─── Timeline ────────────────────────────────────────────────
 function Timeline() {
-  const [entries, setEntries] = useState<(MockFoodEntry | MockHealthOutcome)[]>([])
+  const [entries, setEntries] = useState<TimelineEntry[]>([])
 
   useEffect(() => {
-    const merged = [
+    const merged: TimelineEntry[] = [
       ...mockFoodEntries.map(e => ({ ...e, _type: 'food' as const })),
       ...mockHealthOutcomes.map(e => ({ ...e, _type: 'outcome' as const })),
     ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
     setEntries(merged)
   }, [])
 
-  const isFood = (e: any): e is MockFoodEntry => e._type === 'food'
-  const isOutcome = (e: any): e is MockHealthOutcome => e._type === 'outcome'
+  const isFood = (e: TimelineEntry): e is MockFoodEntry & { _type: 'food' } => e._type === 'food'
+  const isOutcome = (e: TimelineEntry): e is MockHealthOutcome & { _type: 'outcome' } => e._type === 'outcome'
 
   const severityLabel = (s: number) => ['None', 'Mild', 'Moderate', 'Significant', 'Severe'][s] || 'Unknown'
   const bmType = (t: string) => t === 'bm' ? '🚽 Bowel' : t === 'energy' ? '⚡ Energy' : t === 'symptom' ? '🤢 Symptom' : '😊 Mood'
