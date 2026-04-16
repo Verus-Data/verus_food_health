@@ -19,23 +19,26 @@ model User {
 }
 
 model FoodEntry {
-  id                 String       @id @default(cuid())
-  userId             String
-  user               User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  timestamp          DateTime
-  photoUrl           String?
-  description        String?
-  estimatedCalories  Int?
-  confidence         Float?
-  createdAt          DateTime     @default(now())
-  updatedAt          DateTime     @updatedAt
-  ingredients        Ingredient[]
-  healthOutcomes     HealthOutcome[]
+  id                   String       @id @default(cuid())
+  userId               String
+  user                 User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  timestamp            DateTime
+  photoUrl             String?
+  description          String?
+  estimatedCalories    Int?
+  confidence           Float?
+  aiConfidence         Float?
+  ingredientsConfirmed Boolean      @default(false)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  ingredients          Ingredient[]
+  healthOutcomes       HealthOutcome[]
 }
 
 model Ingredient {
   id          String     @id @default(cuid())
   name        String
+  source      String     @default("manual")
   foodEntryId String
   foodEntry   FoodEntry  @relation(fields: [foodEntryId], references: [id], onDelete: Cascade)
   createdAt   DateTime   @default(now())

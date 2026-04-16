@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { timestamp, photoUrl, description, estimatedCalories, confidence, ingredients } =
+    const { timestamp, photoUrl, description, estimatedCalories, confidence, aiConfidence, ingredientsConfirmed, ingredients } =
       await request.json()
 
     const foodEntry = await prisma.foodEntry.create({
@@ -47,9 +47,14 @@ export async function POST(request: NextRequest) {
         description,
         estimatedCalories: estimatedCalories ? parseInt(estimatedCalories) : null,
         confidence: confidence ? parseFloat(confidence) : null,
+        aiConfidence: aiConfidence ? parseFloat(aiConfidence) : null,
+        ingredientsConfirmed: ingredientsConfirmed || false,
         ingredients: ingredients?.length
           ? {
-              create: ingredients.map((name: string) => ({ name })),
+              create: ingredients.map((ing: { name: string; source?: string }) => ({ 
+                name: ing.name,
+                source: ing.source || 'manual'
+              })),
             }
           : undefined,
       },
