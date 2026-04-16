@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  foodEntries    FoodEntry[]
+  healthOutcomes HealthOutcome[]
+}
+
+model FoodEntry {
+  id                 String       @id @default(cuid())
+  userId             String
+  user               User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  timestamp          DateTime
+  photoUrl           String?
+  description        String?
+  estimatedCalories  Int?
+  confidence         Float?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  ingredients        Ingredient[]
+  healthOutcomes     HealthOutcome[]
+}
+
+model Ingredient {
+  id          String     @id @default(cuid())
+  name        String
+  foodEntryId String
+  foodEntry   FoodEntry  @relation(fields: [foodEntryId], references: [id], onDelete: Cascade)
+  createdAt   DateTime   @default(now())
+}
+
+model HealthOutcome {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  foodEntryId  String?
+  foodEntry    FoodEntry? @relation(fields: [foodEntryId], references: [id], onDelete: SetNull)
+  timestamp    DateTime
+  type         String
+  severity     Int
+  notes        String?
+  bristolScale Int?
+  color        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}

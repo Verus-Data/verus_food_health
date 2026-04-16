@@ -1,17 +1,22 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { api, ensureUser } from '@/lib/api'
+import { useSession } from 'next-auth/react'
+import { api } from '@/lib/api'
 import { StatsResponse, IngredientCorrelation } from '@/types'
 
 export default function Stats() {
+  const { data: session } = useSession()
   const [stats, setStats] = useState<StatsResponse | null>(null)
   const [loading, setLoading] = useState(true)
 
   const fetchStats = async () => {
+    if (!session?.user?.id) {
+      setLoading(false)
+      return
+    }
     try {
-      const userId = await ensureUser()
-      const response = await api.get(`/analysis/correlations/${userId}`)
+      const response = await api.get(`/analysis/correlations/${session.user.id}`)
       setStats(response.data)
     } catch (err) {
       console.error(err)

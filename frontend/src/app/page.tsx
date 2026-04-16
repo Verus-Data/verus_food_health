@@ -1,12 +1,17 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { mockFoodEntries, mockHealthOutcomes, calculateCorrelations } from '@/lib/mockData'
+import { useSession, signOut } from 'next-auth/react'
+import { IS_MOCK, getTimeline, getCorrelations, getFoodEntries, getHealthOutcomes, createFoodEntry, createHealthOutcome } from '@/lib/api'
 import type { MockFoodEntry, MockHealthOutcome, MockCorrelation } from '@/lib/mockData'
+import FoodForm from '@/components/FoodForm'
+import HealthOutcomeForm from '@/components/HealthOutcomeForm'
+import Stats from '@/components/Stats'
+import Timeline from '@/components/Timeline'
+import BMForm from '@/components/BMForm'
 
 type TimelineEntry = (MockFoodEntry & { _type: 'food' }) | (MockHealthOutcome & { _type: 'outcome' })
 
-// ─── Stats Cards ────────────────────────────────────────────
 function StatCard({ label, value, color }: { label: string; value: string | number; color: string }) {
   const colorMap: Record<string, string> = {
     green: 'bg-green-50 text-green-700',
@@ -23,16 +28,22 @@ function StatCard({ label, value, color }: { label: string; value: string | numb
   )
 }
 
-// ─── Timeline ────────────────────────────────────────────────
-function Timeline() {
+function TimelineView() {
   const [entries, setEntries] = useState<TimelineEntry[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const merged: TimelineEntry[] = [
-      ...mockFoodEntries.map(e => ({ ...e, _type: 'food' as const })),
-      ...mockHealthOutcomes.map(e => ({ ...e, _type: 'outcome' as const })),
-    ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-    setEntries(merged)
+    async function fetchData() {
+      try {
+        const data = await getTimeline()
+        setEntries(data as TimelineEntry[])
+      } catch (err) {
+        console.error(err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
   }, [])
 
   const isFood = (e: TimelineEntry): e is MockFoodEntry & { _type: 'food' } => e._type === 'food'
@@ -40,6 +51,8 @@ function Timeline() {
 
   const severityLabel = (s: number) => ['None', 'Mild', 'Moderate', 'Significant', 'Severe'][s] || 'Unknown'
   const bmType = (t: string) => t === 'bm' ? '🚽 Bowel' : t === 'energy' ? '⚡ Energy' : t === 'symptom' ? '🤢 Symptom' : '😊 Mood'
+
+  if (loading) return <div className="p-4">Loading timeline...</div>
 
   return (
     <div className="space-y-3">
@@ -90,12 +103,28 @@ function Timeline() {
   )
 }
 
-// ─── Trigger Analysis ───────────────────────────────────────
 function TriggerAnalysis() {
   const [correlations, setCorrelations] = useState<MockCorrelation[]>([])
 
   useEffect(() => {
-    setCorrelations(calculateCorrelations())
+    async function fetchCorrelations() {
+      try {
+        const data = await getCorrelations()
+        if (data.ingredient_correlations) {
+          const mockCorrs: MockCorrelation[] = data.ingredient_correlations.map((c: any) => ({
+            ingredient: c.ingredient,
+            outcomeType: 'bm' as const,
+            avgSeverity: c.avg_bristol,
+            count: c.event_count,
+            severityDistribution: c.bristol_distribution
+          }))
+          setCorrelations(mockCorrs)
+        }
+      } catch (err) {
+        console.error(err)
+      }
+    }
+    fetchCorrelations()
   }, [])
 
   const severityBar = (avg: number) => {
@@ -113,7 +142,6 @@ function TriggerAnalysis() {
 
   return (
     <div className="space-y-6">
-      {/* BM Triggers */}
       <div className="bg-white rounded-xl p-5 shadow-sm">
         <h3 className="font-semibold text-lg mb-3">🚽 Bowel Movement Triggers</h3>
         {bmCorrelations.length === 0 ? (
@@ -131,7 +159,6 @@ function TriggerAnalysis() {
         )}
       </div>
 
-      {/* Symptom Triggers */}
       <div className="bg-white rounded-xl p-5 shadow-sm">
         <h3 className="font-semibold text-lg mb-3">🤢 Symptom Triggers</h3>
         {symptomCorrelations.length === 0 ? (
@@ -152,12 +179,30 @@ function TriggerAnalysis() {
   )
 }
 
-// ─── Food Gallery ────────────────────────────────────────────
 function FoodGallery() {
+  const [entries, setEntries] = useState<MockFoodEntry[]>([])
+  const [loading, setLoading] = useState(true)
   const emoji = ['🥗', '🍝', '🥤', '🥪', '🐟', '🍦']
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const data = await getFoodEntries()
+        setEntries(data as MockFoodEntry[])
+      } catch (err) {
+        console.error(err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [])
+
+  if (loading) return <div className="p-4">Loading gallery...</div>
+
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-      {mockFoodEntries.map((entry, i) => (
+      {entries.map((entry, i) => (
         <div key={entry.id} className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
           <div className="h-32 bg-gradient-to-br from-green-100 to-blue-100 flex items-center justify-center text-5xl">
             {emoji[i % emoji.length]}
@@ -183,101 +228,52 @@ function FoodGallery() {
   )
 }
 
-// ─── Main Dashboard ──────────────────────────────────────────
-export default function Dashboard() {
-  const [tab, setTab] = useState<'timeline' | 'analysis' | 'gallery' | 'roadmap'>('timeline')
-  const [correlations, setCorrelations] = useState<MockCorrelation[]>([])
-
-  useEffect(() => {
-    setCorrelations(calculateCorrelations())
-  }, [])
-
-  const totalMeals = mockFoodEntries.length
-  const totalOutcomes = mockHealthOutcomes.length
-  const linkedMeals = mockHealthOutcomes.filter(o => o.entryId).length
-  const highTriggers = correlations.filter(c => c.avgSeverity >= 3.5).length
+function LogView() {
+  const [tab, setTab] = useState<'food' | 'bm' | 'outcome'>('food')
 
   return (
-    <main className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b px-4 py-4 md:px-8">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">🫧 Gut Health Tracker</h1>
-            <p className="text-sm text-gray-500">V0 — Mock Data Dashboard</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="bg-amber-100 text-amber-800 text-xs font-medium px-2.5 py-1 rounded-full">V0 Mock Mode</span>
-          </div>
-        </div>
-      </header>
-
-      <div className="max-w-5xl mx-auto px-4 md:px-8 py-6">
-        {/* Stats Row */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-          <StatCard label="Meals Logged" value={totalMeals} color="green" />
-          <StatCard label="Health Outcomes" value={totalOutcomes} color="blue" />
-          <StatCard label="Linked Events" value={linkedMeals} color="amber" />
-          <StatCard label="High Triggers" value={highTriggers} color="red" />
-        </div>
-
-        {/* Tab Nav */}
-        <div className="flex gap-1 bg-white rounded-lg shadow-sm p-1 mb-6">
-          {(['timeline', 'analysis', 'gallery', 'roadmap'] as const).map(t => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`flex-1 py-2.5 text-sm font-medium rounded-md transition-colors ${
-                tab === t
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              {t === 'timeline' ? '📅 Timeline' : t === 'analysis' ? '🔍 Analysis' : t === 'gallery' ? '📷 Gallery' : '🗺️ Roadmap'}
-            </button>
-          ))}
-        </div>
-
-        {/* Tab Content */}
-        {tab === 'timeline' && <Timeline />}
-        {tab === 'analysis' && <TriggerAnalysis />}
-        {tab === 'gallery' && <FoodGallery />}
-        {tab === 'roadmap' && <Roadmap />}
-
-        {/* Bristol Scale Reference */}
-        {tab !== 'roadmap' && (
-          <div className="mt-6 bg-white rounded-xl p-4 shadow-sm">
-            <h4 className="font-medium text-sm text-gray-700 mb-2">Bristol Scale Reference</h4>
-            <div className="grid grid-cols-7 gap-1 text-center text-xs">
-              {[
-                { n: 1, label: 'Hard lumps', color: 'bg-red-400' },
-                { n: 2, label: 'Lumpy', color: 'bg-orange-400' },
-                { n: 3, label: 'Cracked', color: 'bg-yellow-400' },
-                { n: 4, label: 'Smooth ✓', color: 'bg-green-500' },
-                { n: 5, label: 'Soft blobs', color: 'bg-yellow-400' },
-                { n: 6, label: 'Fluffy', color: 'bg-orange-400' },
-                { n: 7, label: 'Watery', color: 'bg-red-400' },
-              ].map(b => (
-                <div key={b.n} className="rounded-lg overflow-hidden">
-                  <div className={`${b.color} text-white py-1 font-bold`}>{b.n}</div>
-                  <div className="bg-gray-50 py-1 text-gray-600">{b.label}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+    <div className="space-y-6">
+      <div className="flex gap-1 bg-white rounded-lg shadow-sm p-1">
+        {(['food', 'bm', 'outcome'] as const).map(t => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`flex-1 py-2.5 text-sm font-medium rounded-md transition-colors ${
+              tab === t
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            {t === 'food' ? '🍽️ Food' : t === 'bm' ? '🚽 Bowel' : '💊 Outcome'}
+          </button>
+        ))}
       </div>
-    </main>
+
+      {tab === 'food' && (
+        <div className="max-w-xl mx-auto">
+          <FoodForm onSuccess={() => {}} />
+        </div>
+      )}
+      {tab === 'bm' && (
+        <div className="max-w-xl mx-auto">
+          <BMForm onSuccess={() => {}} />
+        </div>
+      )}
+      {tab === 'outcome' && (
+        <div className="max-w-xl mx-auto">
+          <HealthOutcomeForm onSuccess={() => {}} />
+        </div>
+      )}
+    </div>
   )
 }
 
-// ─── Roadmap ─────────────────────────────────────────────────
 function Roadmap() {
   const phases = [
     {
       version: 'V0',
       title: 'Mock Dashboard',
-      status: '✅ Current',
+      status: '✅ Done',
       color: 'bg-green-100 border-green-300',
       items: [
         'Next.js 14 app with mock data',
@@ -291,7 +287,7 @@ function Roadmap() {
     {
       version: 'V1',
       title: 'Manual Entry + Real DB',
-      status: '🔲 Next',
+      status: '✅ Current',
       color: 'bg-blue-100 border-blue-300',
       items: [
         'Real SQLite → Postgres database',
@@ -363,7 +359,6 @@ function Roadmap() {
         </div>
       </div>
 
-      {/* Open Models for V2 */}
       <div className="bg-white rounded-xl p-5 shadow-sm">
         <h3 className="font-semibold text-lg mb-3">🤖 Open Models for V2 (Self-Hosted)</h3>
         <div className="overflow-x-auto">
@@ -413,5 +408,161 @@ function Roadmap() {
         <p className="text-xs text-gray-400 mt-3">All models run locally — no paid vendor APIs required.</p>
       </div>
     </div>
+  )
+}
+
+function SignInPrompt() {
+  return (
+    <div className="bg-white rounded-xl p-8 shadow-sm text-center">
+      <h2 className="text-xl font-semibold mb-2">Sign In Required</h2>
+      <p className="text-gray-500 mb-4">Please sign in to access your gut health data.</p>
+      <a href="/api/auth/signin" className="inline-block bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">
+        Sign In
+      </a>
+    </div>
+  )
+}
+
+function DashboardContent() {
+  const { data: session } = useSession()
+  const [tab, setTab] = useState<'timeline' | 'analysis' | 'gallery' | 'log' | 'roadmap'>('timeline')
+  const [stats, setStats] = useState({ meals: 0, outcomes: 0, linked: 0, triggers: 0 })
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchStats() {
+      try {
+        const [food, outcomes, correlations] = await Promise.all([
+          getFoodEntries(),
+          getHealthOutcomes(),
+          getCorrelations()
+        ])
+        setStats({
+          meals: Array.isArray(food) ? food.length : 0,
+          outcomes: Array.isArray(outcomes) ? outcomes.length : 0,
+          linked: Array.isArray(outcomes) ? outcomes.filter((o: any) => o.entryId).length : 0,
+          triggers: correlations.ingredient_correlations?.filter((c: any) => c.avg_bristol >= 3.5).length || 0
+        })
+      } catch (err) {
+        console.error(err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchStats()
+  }, [])
+
+  return (
+    <>
+      <div className="flex gap-1 bg-white rounded-lg shadow-sm p-1 mb-6">
+        {(['timeline', 'analysis', 'gallery', 'log', 'roadmap'] as const).map(t => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`flex-1 py-2.5 text-sm font-medium rounded-md transition-colors ${
+              tab === t
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            {t === 'timeline' ? '📅 Timeline' : t === 'analysis' ? '🔍 Analysis' : t === 'gallery' ? '📷 Gallery' : t === 'log' ? '✏️ Log' : '🗺️ Roadmap'}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'timeline' && <TimelineView />}
+      {tab === 'analysis' && <TriggerAnalysis />}
+      {tab === 'gallery' && <FoodGallery />}
+      {tab === 'log' && <LogView />}
+      {tab === 'roadmap' && <Roadmap />}
+
+      {tab !== 'roadmap' && (
+        <div className="mt-6 bg-white rounded-xl p-4 shadow-sm">
+          <h4 className="font-medium text-sm text-gray-700 mb-2">Bristol Scale Reference</h4>
+          <div className="grid grid-cols-7 gap-1 text-center text-xs">
+            {[
+              { n: 1, label: 'Hard lumps', color: 'bg-red-400' },
+              { n: 2, label: 'Lumpy', color: 'bg-orange-400' },
+              { n: 3, label: 'Cracked', color: 'bg-yellow-400' },
+              { n: 4, label: 'Smooth ✓', color: 'bg-green-500' },
+              { n: 5, label: 'Soft blobs', color: 'bg-yellow-400' },
+              { n: 6, label: 'Fluffy', color: 'bg-orange-400' },
+              { n: 7, label: 'Watery', color: 'bg-red-400' },
+            ].map(b => (
+              <div key={b.n} className="rounded-lg overflow-hidden">
+                <div className={`${b.color} text-white py-1 font-bold`}>{b.n}</div>
+                <div className="bg-gray-50 py-1 text-gray-600">{b.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
+export default function Dashboard() {
+  const { data: session, status } = useSession()
+
+  if (status === 'loading') {
+    return (
+      <main className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <p className="text-gray-500">Loading...</p>
+      </main>
+    )
+  }
+
+  return (
+    <main className="min-h-screen bg-gray-50">
+      <header className="bg-white border-b px-4 py-4 md:px-8">
+        <div className="max-w-5xl mx-auto flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">🫧 Gut Health Tracker</h1>
+            <p className="text-sm text-gray-500">
+              {IS_MOCK ? 'V0 — Mock Data' : 'V1 — Real Backend'}
+              {session?.user?.name ? ` · ${session.user.name}` : ''}
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            {IS_MOCK ? (
+              <span className="bg-amber-100 text-amber-800 text-xs font-medium px-2.5 py-1 rounded-full">Mock Mode</span>
+            ) : (
+              <span className="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-1 rounded-full">Live</span>
+            )}
+            {session ? (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600">{session.user?.email}</span>
+                <button
+                  onClick={() => signOut()}
+                  className="text-sm text-red-600 hover:text-red-700 font-medium"
+                >
+                  Sign Out
+                </button>
+              </div>
+            ) : (
+              <a href="/api/auth/signin" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                Sign In
+              </a>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-5xl mx-auto px-4 md:px-8 py-6">
+        {session ? (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+              <StatCard label="Meals Logged" value={0} color="green" />
+              <StatCard label="Health Outcomes" value={0} color="blue" />
+              <StatCard label="Linked Events" value={0} color="amber" />
+              <StatCard label="High Triggers" value={0} color="red" />
+            </div>
+            <DashboardContent />
+          </>
+        ) : (
+          <SignInPrompt />
+        )}
+      </div>
+    </main>
   )
 }
