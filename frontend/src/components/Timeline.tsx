@@ -1,17 +1,22 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { api, ensureUser } from '@/lib/api'
+import { useSession } from 'next-auth/react'
+import { api } from '@/lib/api'
 import { TimelineEvent } from '@/types'
 
 export default function Timeline() {
+  const { data: session } = useSession()
   const [events, setEvents] = useState<TimelineEvent[]>([])
   const [loading, setLoading] = useState(true)
 
   const fetchTimeline = async () => {
+    if (!session?.user?.id) {
+      setLoading(false)
+      return
+    }
     try {
-      const userId = await ensureUser()
-      const response = await api.get(`/analysis/timeline/${userId}?days=30`)
+      const response = await api.get(`/analysis/timeline/${session.user.id}?days=30`)
       setEvents(response.data)
     } catch (err) {
       console.error(err)
