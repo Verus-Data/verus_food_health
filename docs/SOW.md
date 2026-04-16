@@ -11,11 +11,35 @@
 5. Test suite covering core functionality
 
 ## Technical Stack
-- **Frontend**: Next.js 14 (React 18), Tailwind CSS, TypeScript
-- **Backend**: FastAPI (Python 3.10+), Prisma ORM, SQLite (MVP)
+- **Frontend**: Next.js 14 (React 18), Tailwind CSS, TypeScript — **static export only** (no server-side rendering)
+- **Backend**: FastAPI (Python 3.10+) running as **stateless CGI** (no persistent process), Prisma ORM, SQLite
 - **AI Services**: HuggingFace Food-101 (image classification), scipy (statistical analysis)
-- **Authentication**: NextAuth (JWT-based sessions)
-- **Deployment**: Docker containers, GitHub Actions CI/CD
+- **Authentication**: JWT-based sessions stored client-side (no server session state)
+- **Deployment**: Static files to web host, CGI scripts for API endpoints, GitHub Actions CI/CD
+
+## Architecture Requirements
+
+### Frontend: Static Export
+The Next.js frontend **must** be exportable to static HTML/JS. This means:
+- **No** `getServerSession()` or server-side auth checks
+- **No** API routes that require server-side processing
+- All auth state managed client-side via JWT in localStorage/cookies
+- API calls go to separate CGI endpoints, not Next.js API routes
+- Build output is static files deployable to any web host (DreamHost, etc.)
+
+### Backend: Stateless CGI
+The FastAPI backend **must** run as stateless CGI scripts:
+- **No** persistent server process
+- Each request spins up fresh Python interpreter via CGI
+- SQLite database file accessed directly (file-based, no connection pool)
+- Authentication via JWT verification on each request (no session store)
+- Designed for shared hosting environments (DreamHost CGI)
+
+### Rationale
+This architecture prioritizes **deployment flexibility** over developer convenience. By eliminating server-side rendering and persistent processes, the app can run on:
+- Cheap shared hosting (DreamHost, etc.)
+- Static site hosts (Cloudflare Pages, Netlify) + separate CGI endpoint
+- Minimal infrastructure (no container orchestration, no server maintenance)
 
 ## Timeline & Milestones
 | Phase | Duration | Key Deliverables |

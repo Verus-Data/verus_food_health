@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import { login, register } from '@/lib/api'
+import { useAuth } from '@/lib/AuthContext'
 
 export default function SignIn() {
   const [isLogin, setIsLogin] = useState(true)
@@ -12,6 +13,7 @@ export default function SignIn() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
+  const { login: authLogin } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -20,45 +22,19 @@ export default function SignIn() {
 
     try {
       if (isLogin) {
-        const result = await signIn('credentials', {
-          email,
-          password,
-          redirect: false,
-        })
-
-        if (result?.error) {
-          setError('Invalid email or password')
-        } else {
-          router.push('/')
-          router.refresh()
-        }
+        const data = await login(email, password)
+        authLogin(data.token, data.user)
+        router.push('/')
       } else {
-        const res = await fetch('/api/auth/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password, name }),
-        })
-
-        if (!res.ok) {
-          const data = await res.json()
-          setError(data.error || 'Failed to register')
-        } else {
-          const result = await signIn('credentials', {
-            email,
-            password,
-            redirect: false,
-          })
-
-          if (result?.error) {
-            setError('Account created but failed to sign in')
-          } else {
-            router.push('/')
-            router.refresh()
-          }
-        }
+        const data = await register(email, password, name || undefined)
+        // After registration, auto-login
+        const loginData = await login(email, password)
+        authLogin(loginData.token, loginData.user)
+        router.push('/')
       }
-    } catch (err) {
-      setError('An error occurred')
+    } catch (err: any) {
+      const message = err?.response?.data?.error || err?.message || 'An error occurred'
+      setError(message)
     } finally {
       setLoading(false)
     }

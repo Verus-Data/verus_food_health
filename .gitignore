@@ -6,11 +6,11 @@ __pycache__/
 .Python
 build/
 develop-eggs/
-dist/
+# dist/ is used for Next.js static export output
+python-dist/
 downloads/
 eggs/
 .eggs/
-lib/
 lib64/
 parts/
 sdist/
@@ -46,6 +46,7 @@ database/*.sqlite3
 node_modules/
 .next/
 out/
+frontend/dist/
 build/
 *.log
 npm-debug.log*

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useSession, signOut } from 'next-auth/react'
+import { useAuth } from '@/lib/AuthContext'
 import { IS_MOCK, getTimeline, getCorrelations, getFoodEntries, getHealthOutcomes, createFoodEntry, createHealthOutcome, getPredictions, getTrends, exportData, runAnalysis } from '@/lib/api'
 import type { MockFoodEntry, MockHealthOutcome, MockCorrelation } from '@/lib/mockData'
 import FoodForm from '@/components/FoodForm'
@@ -191,21 +191,21 @@ function TriggerAnalysis() {
 }
 
 function PredictionsView() {
-  const { data: session } = useSession()
+  const { user } = useAuth()
   const [warnings, setWarnings] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [running, setRunning] = useState(false)
 
   useEffect(() => {
-    if (session?.user?.id) {
+    if (user?.id) {
       fetchPredictions()
     }
-  }, [session?.user?.id])
+  }, [user?.id])
 
   async function fetchPredictions() {
-    if (!session?.user?.id) return
+    if (!user?.id) return
     try {
-      const data = await getPredictions(session.user.id)
+      const data = await getPredictions(user!.id)
       setWarnings(data.warnings || [])
     } catch (err) {
       console.error(err)
@@ -215,10 +215,10 @@ function PredictionsView() {
   }
 
   async function handleRunAnalysis() {
-    if (!session?.user?.id) return
+    if (!user?.id) return
     setRunning(true)
     try {
-      await runAnalysis(session.user.id)
+      await runAnalysis(user!.id)
       await fetchPredictions()
     } catch (err) {
       console.error(err)
@@ -293,20 +293,20 @@ function PredictionsView() {
 }
 
 function TrendsView() {
-  const { data: session } = useSession()
+  const { user } = useAuth()
   const [trends, setTrends] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (session?.user?.id) {
+    if (user?.id) {
       fetchTrends()
     }
-  }, [session?.user?.id])
+  }, [user?.id])
 
   async function fetchTrends() {
-    if (!session?.user?.id) return
+    if (!user?.id) return
     try {
-      const data = await getTrends(session.user.id, 30)
+      const data = await getTrends(user!.id, 30)
       setTrends(data)
     } catch (err) {
       console.error(err)
@@ -489,7 +489,7 @@ function Roadmap() {
       color: 'bg-blue-100 border-blue-300',
       items: [
         'Real SQLite → Postgres database',
-        'Authentication (NextAuth / OAuth)',
+        'Authentication (JWT + CGI backend)',
         'Manual ingredient entry with autocomplete',
         'AI-assisted food descriptions (text → meal parsing)',
         'Photo upload to local/S3 storage',
@@ -614,7 +614,7 @@ function SignInPrompt() {
     <div className="bg-white rounded-xl p-8 shadow-sm text-center">
       <h2 className="text-xl font-semibold mb-2">Sign In Required</h2>
       <p className="text-gray-500 mb-4">Please sign in to access your gut health data.</p>
-      <a href="/api/auth/signin" className="inline-block bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">
+      <a href="/auth/signin" className="inline-block bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">
         Sign In
       </a>
     </div>
@@ -622,7 +622,7 @@ function SignInPrompt() {
 }
 
 function DashboardContent() {
-  const { data: session } = useSession()
+  const { user, logout } = useAuth()
   const [tab, setTab] = useState<'timeline' | 'analysis' | 'predictions' | 'trends' | 'gallery' | 'log' | 'roadmap'>('timeline')
   const [stats, setStats] = useState({ meals: 0, outcomes: 0, linked: 0, triggers: 0 })
   const [loading, setLoading] = useState(true)
@@ -651,13 +651,13 @@ function DashboardContent() {
   }, [])
 
   const handleExport = async () => {
-    if (!session?.user?.id) return
+    if (!user?.id) return
     try {
-      const blob = await exportData(session.user.id, 'csv')
+      const blob = await exportData(user!.id, 'csv')
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `gut-health-export-${session.user.id}.csv`
+      a.download = `gut-health-export-${user!.id}.csv`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -685,7 +685,7 @@ function DashboardContent() {
             </button>
           ))}
         </div>
-        {session && (
+        {user && (
           <button
             onClick={handleExport}
             className="bg-green-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
@@ -729,9 +729,9 @@ function DashboardContent() {
 }
 
 export default function Dashboard() {
-  const { data: session, status } = useSession()
+  const { user, isAuthenticated, isLoading, logout } = useAuth()
 
-  if (status === 'loading') {
+  if (isLoading) {
     return (
       <main className="min-h-screen bg-gray-50 flex items-center justify-center">
         <p className="text-gray-500">Loading...</p>
@@ -747,7 +747,7 @@ export default function Dashboard() {
             <h1 className="text-2xl font-bold text-gray-900">🫧 Gut Health Tracker</h1>
             <p className="text-sm text-gray-500">
               {IS_MOCK ? 'V0 — Mock Data' : 'V1 — Real Backend'}
-              {session?.user?.name ? ` · ${session.user.name}` : ''}
+              {user?.name ? ` · ${user.name}` : ''}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -756,18 +756,18 @@ export default function Dashboard() {
             ) : (
               <span className="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-1 rounded-full">Live</span>
             )}
-            {session ? (
+            {isAuthenticated ? (
               <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600">{session.user?.email}</span>
+                <span className="text-sm text-gray-600">{user?.email}</span>
                 <button
-                  onClick={() => signOut()}
+                  onClick={() => logout()}
                   className="text-sm text-red-600 hover:text-red-700 font-medium"
                 >
                   Sign Out
                 </button>
               </div>
             ) : (
-              <a href="/api/auth/signin" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+              <a href="/auth/signin" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
                 Sign In
               </a>
             )}
@@ -776,7 +776,7 @@ export default function Dashboard() {
       </header>
 
       <div className="max-w-5xl mx-auto px-4 md:px-8 py-6">
-        {session ? (
+        {isAuthenticated ? (
           <>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
               <StatCard label="Meals Logged" value={0} color="green" />

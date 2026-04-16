@@ -1,12 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import init_db
-from .routers import users_router, bm_router, analysis_router
+from .routers import users_router, bm_router, analysis_router, auth_router, food_router, health_router
 
 app = FastAPI(
     title="Gut Health Tracker API",
     description="API for tracking food and bowel movement correlations",
-    version="1.0.0",
+    version="2.0.0",
 )
 
 app.add_middleware(
@@ -17,9 +17,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(bm_router)
 app.include_router(analysis_router)
+app.include_router(food_router)
+app.include_router(health_router)
 
 
 @app.on_event("startup")
@@ -29,7 +32,7 @@ def startup():
 
 @app.get("/")
 def root():
-    return {"message": "Gut Health Tracker API", "version": "1.0.0"}
+    return {"message": "Gut Health Tracker API", "version": "2.0.0"}
 
 
 @app.get("/health")
