@@ -2,7 +2,7 @@
 name = "verus-food-health-backend"
 version = "0.1.0"
 description = "FastAPI backend for Verus Food Health Tracker"
-readme = "README.md"
+
 requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.109.0",
