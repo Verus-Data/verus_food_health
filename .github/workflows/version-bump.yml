@@ -1,0 +1,82 @@
+name: Version Bump
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read current version
+        id: current_version
+        run: echo "version=$(cat VERSION | tr -d '\n')" >> $GITHUB_OUTPUT
+
+      - name: Bump version
+        id: bump
+        uses: anothrNick/github-tag-action@1.71.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WITH_V: false
+          DEFAULT_BUMP: ${{ inputs.bump_type }}
+          INITIAL_VERSION: ${{ steps.current_version.outputs.version }}
+          RELEASE_BRANCHES: main
+          TAG_CONTEXT: "v"
+
+      - name: Update VERSION file
+        run: |
+          NEW_VERSION="${{ steps.bump.outputs.new_tag }}"
+          NEW_VERSION="${NEW_VERSION#v}"
+          echo "$NEW_VERSION" > VERSION
+
+      - name: Update frontend package.json
+        run: |
+          NEW_VERSION="$(cat VERSION | tr -d '\n')"
+          cd frontend
+          npm version $NEW_VERSION --no-git-tag-version --allow-same-version
+
+      - name: Update backend pyproject.toml
+        run: |
+          NEW_VERSION="$(cat VERSION | tr -d '\n')"
+          sed -i "s/^version = .*/version = \"$NEW_VERSION\"/" backend/pyproject.toml
+
+      - name: Update service pyproject.toml files
+        run: |
+          NEW_VERSION="$(cat VERSION | tr -d '\n')"
+          sed -i "s/^version = .*/version = \"$NEW_VERSION\"/" services/food-classifier/pyproject.toml
+          sed -i "s/^version = .*/version = \"$NEW_VERSION\"/" services/trigger-analyzer/pyproject.toml
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: bump version to $(cat VERSION | tr -d '\n')"
+          title: "chore: bump version to $(cat VERSION | tr -d '\n')"
+          branch: version-bump-${{ inputs.bump_type }}
+          base: main
+          delete-branch: true
+          body: |
+            Automated version bump (${{ inputs.bump_type }}) from ${{ steps.current_version.outputs.version }} to $(cat VERSION | tr -d '\n')
+
+            Updated:
+            - `VERSION` (canonical source)
+            - `frontend/package.json`
+            - `backend/pyproject.toml`
+            - `services/food-classifier/pyproject.toml`
+            - `services/trigger-analyzer/pyproject.toml`
