@@ -1,0 +1,16 @@
+[project]
+name = "verus-food-health-trigger-analyzer"
+version = "0.1.0"
+description = "Trigger analyzer microservice for Verus Food Health"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.109.2",
+    "uvicorn>=0.27.1",
+    "pydantic>=2.6.1",
+    "numpy>=1.26.4",
+    "scipy>=1.12.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

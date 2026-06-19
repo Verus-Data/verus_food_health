@@ -16,6 +16,8 @@ model User {
   updatedAt DateTime @updatedAt
   foodEntries    FoodEntry[]
   healthOutcomes HealthOutcome[]
+  personalTriggers PersonalTrigger[]
+  dailyTrends    DailyTrend[]
 }
 
 model FoodEntry {
@@ -58,4 +60,41 @@ model HealthOutcome {
   color        String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+}
+
+model PersonalTrigger {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ingredient    String
+  pValue        Float
+  effectSize    Float
+  sampleSize    Int
+  confidence    String
+  avgSeverityWith    Float
+  avgSeverityWithout Float
+  countWith     Int
+  countWithout  Int
+  lastAnalyzed  DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([userId, ingredient])
+}
+
+model DailyTrend {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date           DateTime
+  avgBmSeverity  Float?
+  avgEnergy      Float?
+  topSymptom     String?
+  triggerCount   Int      @default(0)
+  foodCount      Int      @default(0)
+  outcomeCount   Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([userId, date])
 }

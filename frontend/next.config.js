@@ -1,8 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
+  output: 'export',
+  distDir: 'dist',
   images: {
-    domains: ['localhost'],
+    unoptimized: true,
   },
 }
 

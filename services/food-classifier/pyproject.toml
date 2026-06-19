@@ -1,0 +1,19 @@
+[project]
+name = "verus-food-health-food-classifier"
+version = "0.1.0"
+description = "Food classifier microservice for Verus Food Health"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.1.0",
+    "transformers>=4.36.0",
+    "fastapi>=0.109.0",
+    "uvicorn>=0.27.0",
+    "python-multipart>=0.0.6",
+    "Pillow>=10.2.0",
+    "pydantic>=2.5.3",
+    "numpy>=1.26.3",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

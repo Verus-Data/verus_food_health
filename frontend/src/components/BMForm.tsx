@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useSession } from 'next-auth/react'
+import { useAuth } from '@/lib/AuthContext'
 import { api } from '@/lib/api'
 
 const BRISTOL_DESCRIPTIONS = [
@@ -30,7 +30,7 @@ interface BMFormProps {
 }
 
 export default function BMForm({ onSuccess }: BMFormProps) {
-  const { data: session } = useSession()
+  const { user } = useAuth()
   const [bristolScale, setBristolScale] = useState<number>(4)
   const [color, setColor] = useState<string>('brown')
   const [notes, setNotes] = useState('')
@@ -38,14 +38,14 @@ export default function BMForm({ onSuccess }: BMFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!session?.user?.id) {
+    if (!user?.id) {
       alert('Please sign in to log bowel movements')
       return
     }
     setLoading(true)
     try {
       await api.post('/bm/', {
-        user_id: session.user.id,
+        user_id: user.id,
         bristol_scale: bristolScale,
         color,
         notes: notes || null
